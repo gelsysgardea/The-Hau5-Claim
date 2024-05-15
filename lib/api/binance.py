@@ -29,6 +29,8 @@ class BinanceAPI:
                 aiohttp.ClientConnectorError,
                 aiohttp.ServerDisconnectedError,
                 aiohttp.ClientError,
+                aiohttp.ClientTimeout,
+                aiohttp.ServerTimeoutError,
             ):
                 custom_print(
                     "An error occurred, while connecting to Binance API", "error"

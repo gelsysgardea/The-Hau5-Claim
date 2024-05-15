@@ -15,22 +15,26 @@ class BaseClient:
         self.setup_event_handler()
 
     def setup_event_handler(self):
-        @self.client.on(
-            events.NewMessage(
-                chats=self.config.CHATS
-            )
-        )
+        @self.client.on(events.NewMessage(chats=self.config.CHATS))
         async def _(event: events.NewMessage.Event):
-            token = ""
-            if event.chat_id == -1001610472708:
-                token = event.raw_text[4:13:].strip()
+            try:
+                token = ""
+                if event.chat_id == -1001610472708:
+                    token = event.raw_text[4:13:].strip()
 
-            if event.chat_id in [-1001813092752, -1001515379979, -1001644346269]:
-                if not len(event.raw_text) == 8 or len(event.raw_text.split(" ")) > 1:
-                    return
-                token = event.raw_text.strip()
+                if event.chat_id in [-1001813092752, -1001515379979, -1001644346269]:
+                    if (
+                        not len(event.raw_text) == 8
+                        or len(event.raw_text.split(" ")) > 1
+                    ):
+                        return
+                    token = event.raw_text.strip()
 
-            await self.manipulator.main(token)
+                await self.manipulator.main(token)
+            except TimeoutError:
+                custom_print(
+                    "An unexpected error occurred while fetching a message", "error"
+                )
 
     def start(self):
         custom_print("Starting the proccesses...", "success")

@@ -37,7 +37,7 @@ class Config:
         "x-ui-request-trace": "",
         "lang": "uk-UA",  # Constant value
         "Referer": "https://www.binance.com/uk-UA/my/wallet/account/payment/cryptobox",  # Constant value
-        "Cookie": "",
+        "Cookie": '',
     }
 
     def __getelement__(self, element: str) -> Union[int, float, bool, str]:

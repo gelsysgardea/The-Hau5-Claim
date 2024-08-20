@@ -6,7 +6,7 @@
 `2` Install git from [git-scm.com](https://github.com/git-for-windows/git/releases/download/v2.44.0.windows.1/Git-2.44.0-64-bit.exe)  
 `3` Clone this repository 
 ```
-git clone https://github.com/devbutlazy/BinanceCryptoBoxWrapper
+git clone https://github.com/devbutlazy/Binance-Crypto-Box-Wrapper
 ```
 `4` Go to`cmd.exe` and type `cd PROJECT_PATH`  
 `5` Type `pip install -r requirements.txt` to install required packages  

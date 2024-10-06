@@ -31,6 +31,8 @@ class BinanceAPI:
                 aiohttp.ClientError,
                 aiohttp.ClientTimeout,
                 aiohttp.ServerTimeoutError,
+                aiohttp.ClientTimeout,
+                aiohttp.ServerTimeoutError,
             ):
                 custom_print(
                     "An error occurred, while connecting to Binance API", "error"
@@ -55,6 +57,11 @@ class BinanceAPI:
             custom_print(response_json, "error")
             return "processed"
         
+
+        elif response_json["code"] not in ["100002001", "403067", "403802", "403803", "PAY4001COM000"]:
+            custom_print(response_json, "error")
+            return "processed"
+        
         match response_json["code"]:
             case "100002001":
                 custom_print("Session expired. Re-enter new credintials", "error")
@@ -72,9 +79,9 @@ class BinanceAPI:
                 return "processed"
 
             case "403803":
-                custom_print(f"Invalid redpacket entered: {redpacket}", "info")
+                custom_print(f"Invalid redpacket entered: {redpacket}", "error")
                 return "processed"
             
             case "PAY4001COM000":
-                custom_print(f"Invalid redpacket entered: {redpacket}", "info")
+                custom_print(f"Invalid redpacket entered: {redpacket}", "error")
                 return "processed"

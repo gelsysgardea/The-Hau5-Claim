@@ -34,10 +34,10 @@ python main.py
     - Better logging (removed logger lib), and more information about it. 
 
 # How to create an EXE file from python code?
-`1.` If you want to compile with console, run the `CONSOLE.bat`  
-`2.` If you want to compile WITHOUGHT console, run `NO_CONSOLE.bat`
+`1.` If you want to compile with console, run the `build-exe/CONSOLE.bat`  
+`2.` If you want to compile WITHOUGHT console, run `build-exe/NO_CONSOLE.bat`
 
 **NOTE: Cookies, and other configurations should be done in code, before running pyinstaller!** 
 
 
-### License: GNU GPL 3
+### (c) License: MIT-LICENSE

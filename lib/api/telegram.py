@@ -16,12 +16,7 @@ class BaseClient:
 
     def setup_event_handler(self):
         @self.client.on(events.NewMessage(chats=self.config.CHATS))
-        @self.client.on(events.NewMessage(chats=self.config.CHATS))
         async def _(event: events.NewMessage.Event):
-            try:
-                token = ""
-                if event.chat_id == -1001610472708:
-                    token = event.raw_text[4:13:].strip()
             try:
                 token = ""
                 if event.chat_id == -1001610472708:

@@ -23,7 +23,7 @@ class Config:
     MAX_HOUR_REQUESTS: Union[int, float] = (
         100  # Maximum number of requests per hour (0 - unlimited)
     )
-
+    
     headers = {
         "User-Agent": "",  # Constant value if logged in from one device
         "bnc-uuid": "",  # Constant value

@@ -1,4 +1,4 @@
-# 🤖 Bot Automático para Códigos de Binance 🚀
+# 🏠 The Hau5 Claim 🤖
 
 Herramienta automatizada para reclamar códigos de criptocajas de Binance desde canales de Telegram.
 

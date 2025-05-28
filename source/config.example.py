@@ -16,7 +16,7 @@ class Config:
     # CONFIGURACIÓN DE LA API DE TELEGRAM
     # Obtén estos valores en https://my.telegram.org/apps
     # ==================================================
-    CLIENT_NAME: str = "binance_bot"  # Nombre de la sesión (puede ser cualquiera)
+    CLIENT_NAME: str = "the_hau5_claim"  # Nombre de la sesión (puede ser cualquiera)
     
     # IMPORTANTE: Reemplaza estos valores con los tuyos propios
     # 1. Ve a https://my.telegram.org/apps

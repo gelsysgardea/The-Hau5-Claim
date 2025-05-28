@@ -1,5 +1,7 @@
 import re
-from typing import Optional
+import json
+import asyncio
+from typing import Optional, Dict, Any
 
 import aiohttp
 
@@ -10,78 +12,122 @@ from source import custom_print
 class BinanceAPI:
     def __init__(self):
         self.config: Config = Config()
-        self.response: Optional[aiohttp.ClientResponse]
+        self.response: Optional[aiohttp.ClientResponse] = None
 
-    async def send_request(self, redpacket: str) -> Optional[str]:
+    async def send_request(self, redpacket: str) -> str:
         """
-        Send request to Binance API and return response
-        :param redpacket: Redpacket ID
-        :return: string or None
+        Envía una solicitud a la API de Binance para reclamar un código de criptocaja.
+        
+        Args:
+            redpacket (str): Código de la criptocaja a reclamar.
+            
+        Returns:
+            str: Estado del reclamo ("claimed", "captcha", "too_many_requests", "processed")
         """
-
-        async with aiohttp.ClientSession(headers=self.config.headers) as session:
-            try:
-                self.response = await session.post(
-                    "https://www.binance.com/bapi/pay/v1/private/binance-pay/gift-box/code/grabV2",
-                    json={"channel": "DEFAULT", "grabCode": redpacket, "scene": None},
-                )
-            except (
-                aiohttp.ClientConnectorError,
-                aiohttp.ServerDisconnectedError,
-                aiohttp.ClientError,
-                aiohttp.ClientTimeout,
-                aiohttp.ServerTimeoutError,
-                aiohttp.ClientTimeout,
-                aiohttp.ServerTimeoutError,
-            ):
-                custom_print(
-                    "An error occurred, while connecting to Binance API", "error"
-                )
-                return "processed"
-
-        response_json = await self.response.json()
-        if response_json["success"]:
-            print(f">> [Currency]: {response_json['data']['currency']}")
-            print(f">> [Amount]: {response_json['data']['grabAmountStr']}")
-            return "claimed"
-
-        elif response_json.get("data", None) and "validateId" in response_json["data"]:
-            custom_print(
-                f"Captcha. Break time for 1 hour."
-                f"({match.group(1)} hours)",
-                "error",
-            )
-            return "captcha"
-
-        elif response_json["code"] not in ["100002001", "403067", "403802", "403803", "PAY4001COM000"]:
-            custom_print(response_json, "error")
+        if not redpacket or not isinstance(redpacket, str) or len(redpacket) < 5:
+            custom_print("Código de criptocaja inválido", "error")
             return "processed"
-        
 
-        elif response_json["code"] not in ["100002001", "403067", "403802", "403803", "PAY4001COM000"]:
-            custom_print(response_json, "error")
+        url = "https://www.binance.com/bapi/pay/v1/private/binance-pay/gift-box/code/grabV2"
+        payload = {
+            "channel": "DEFAULT",
+            "grabCode": redpacket.strip(),
+            "scene": None
+        }
+
+        try:
+            # Intentar conectar con la API de Binance
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url,
+                    headers=self.config.headers,
+                    json=payload,
+                    timeout=30
+                ) as response:
+                    self.response = response
+                    
+                    # Verificar si la respuesta es exitosa
+                    if response.status != 200:
+                        custom_print(f"Error en la respuesta HTTP: {response.status}", "error")
+                        return "processed"
+                    
+                    try:
+                        response_json = await response.json()
+                    except json.JSONDecodeError:
+                        custom_print("Error al decodificar la respuesta JSON", "error")
+                        return "processed"
+                    
+                    # Procesar la respuesta
+                    return await self._process_response(response_json, redpacket)
+                    
+        except asyncio.TimeoutError:
+            custom_print("Tiempo de espera agotado al conectar con Binance", "error")
             return "processed"
-        
-        match response_json["code"]:
-            case "100002001":
-                custom_print("Session expired. Re-enter new credintials", "error")
-            case "403067":
-                match = re.search(r"через (\d+:\d+)", response_json["message"])
-                custom_print(
-                    f"Too many requests. Break time for 1 hour."
-                    f"({match.group(1)} hours)",
-                    "error",
-                )
+            
+        except aiohttp.ClientError as e:
+            custom_print(f"Error de conexión: {str(e)}", "error")
+            return "processed"
+            
+        except Exception as e:
+            custom_print(f"Error inesperado: {str(e)}", "error")
+            return "processed"
+    
+    async def _process_response(self, response: Dict[str, Any], redpacket: str) -> str:
+        """Procesa la respuesta de la API de Binance."""
+        try:
+            # Verificar si la respuesta es None o no es un diccionario
+            if not response or not isinstance(response, dict):
+                custom_print("Error: Respuesta no válida de la API", "error")
+                return "error"
+            
+            # Respuesta exitosa
+            if isinstance(response.get("success", False), bool) and response.get("success"):
+                # Extraer datos de manera segura
+                data = response.get("data", {})
+                currency = data.get("currency", "N/A")
+                amount = data.get("grabAmountStr", "0")
+                custom_print(f"¡Caja reclamada exitosamente! {amount} {currency}", "success")
+                return "claimed"
+            
+            # Manejo de errores conocidos
+            error_code = response.get("code", "")
+            error_message = response.get("message", "Error desconocido")
+            
+            # Captcha detectado
+            if "validateId" in response.get("data", {}):
+                custom_print("Se ha detectado un CAPTCHA. Por favor, resuélvelo manualmente.", "error")
+                return "captcha"
+            
+            # Límite de solicitudes excedido
+            if error_code == "403067":
+                # Intentar extraer el tiempo de espera del mensaje de error
+                wait_time = "1 hora"  # Valor por defecto
+                match = re.search(r"(\d+):(\d+)", error_message)
+                if match:
+                    hours, minutes = match.groups()
+                    wait_time = f"{hours} horas y {minutes} minutos"
+                custom_print(f"Demasiadas solicitudes. Espera {wait_time} antes de intentar de nuevo.", "warning")
                 return "too_many_requests"
-
-            case "403802":
-                custom_print(f"{redpacket} Crypto Box has been claimed", "error")
-                return "processed"
-
-            case "403803":
-                custom_print(f"Invalid redpacket entered: {redpacket}", "error")
+            
+            # Caja ya reclamada
+            if error_code == "403802":
+                custom_print(f"La criptocaja {redpacket} ya ha sido reclamada.", "info")
                 return "processed"
             
-            case "PAY4001COM000":
-                custom_print(f"Invalid redpacket entered: {redpacket}", "error")
+            # Código inválido
+            if error_code in ["403803", "PAY4001COM000"]:
+                custom_print(f"Código de criptocaja inválido: {redpacket}", "error")
                 return "processed"
+            
+            # Sesión expirada
+            if error_code == "100002001":
+                custom_print("La sesión ha expirado. Por favor, inicia sesión nuevamente.", "error")
+                return "session_expired"
+            
+            # Otro tipo de error
+            custom_print(f"Error en la respuesta de Binance: {error_message} (Código: {error_code})", "error")
+            return "processed"
+            
+        except Exception as e:
+            custom_print(f"Error al procesar la respuesta: {str(e)}", "error")
+            return "processed"

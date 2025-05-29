@@ -32,6 +32,9 @@ class Config:
     # Número máximo de solicitudes por hora (0 = ilimitado)
     MAX_HOUR_REQUESTS: Union[int, float] = 100
     
+    # Delay in seconds between claiming attempts
+    REQUEST_DELAY_SECONDS: Union[int, float] = 3
+    
     # Configuración de encabezados para las solicitudes HTTP
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",

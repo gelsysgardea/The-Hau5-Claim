@@ -13,11 +13,13 @@ from source.utils import custom_print
 
 if TYPE_CHECKING:
     from source.config import Config # For type hinting
+    from lib.api.telegram import BaseClient # Added for type hinting
 
 
 class ManipulateToken:
-    def __init__(self, config: 'Config'): # Added config parameter with string literal type hint
-        self.config: 'Config' = config # Set config from parameter, type hint as string literal
+    def __init__(self, config: 'Config', client_handler: 'BaseClient'): # Added client_handler
+        self.config: 'Config' = config 
+        self.client_handler: 'BaseClient' = client_handler # Store client_handler
         # Pass config to BinanceAPI constructor
         self.api: BinanceAPI = BinanceAPI(self.config)
 
@@ -127,23 +129,41 @@ class ManipulateToken:
             await asyncio.sleep(delay)
             result = await self.api.send_request(token)
             
+            response_status = ""
+            claimed_data = None
+
+            if isinstance(result, dict) and result.get("status") == "claimed":
+                response_status = "claimed"
+                claimed_data = result.get("data")
+            elif isinstance(result, str):
+                response_status = result
+            else:
+                custom_print(f"Respuesta inesperada de API: {result}", "error")
+                response_status = "unknown_api_response"
+
             # Procesar el resultado
-            match result:
+            match response_status:
                 case "claimed":
-                    custom_print(f"✅ Código {token} reclamado exitosamente!", "success")
+                    amount = claimed_data.get("amount", "N/A") if claimed_data else "N/A"
+                    currency = claimed_data.get("currency", "") if claimed_data else ""
+                    custom_print(f"✅ Código {token} reclamado exitosamente! {amount} {currency}", "success")
                     self.permanently_claimed_codes.add(token) # Add to in-memory set
                     self._save_claimed_code(token) # Save to persistent storage
+                    await self.client_handler.send_admin_notification(f"🎉 ¡Código `{token}` reclamado! Recibiste: *{amount} {currency}*")
                 case "processed":
                     custom_print(f"🔍 Código {token} ya fue procesado o es inválido.", "info")
                 case "captcha":
                     custom_print("¡Captcha detectado! Se requiere intervención manual. Pausando procesamiento.", "error")
                     self.timeout = True
+                    await self.client_handler.send_admin_notification(f"🚫 ¡Captcha detectado en Binance para el código `{token}`! Se requiere intervención manual. El bot se ha detenido temporalmente.")
                 case "too_many_requests":
                     custom_print("Límite de solicitudes alcanzado (too_many_requests). Pausando procesamiento.", "warning")
                     self.timeout = True
+                    await self.client_handler.send_admin_notification(f"⏳ Demasiadas solicitudes a Binance procesando el código `{token}`. El bot esperará un tiempo.")
                 case "session_expired":
                     custom_print(f"❌ Sesión de Binance expirada al intentar procesar {token}. Actualiza credenciales/cookies y reinicia. Pausando.", "error")
                     self.timeout = True
+                    await self.client_handler.send_admin_notification(f"⚠️ ¡Sesión de Binance expirada! El bot necesita reconfiguración/reinicio de sesión para el código `{token}`.")
                 case "timeout_error":
                     custom_print(f"❌ Timeout de red al intentar reclamar {token}. Reintentando con el próximo token si es posible.", "error")
                 case "network_error":
@@ -170,8 +190,12 @@ class ManipulateToken:
                     api_error_code = status.split('binance_api_error_')[-1]
                     custom_print(f"❌ Error específico de API Binance '{api_error_code}' para {token}. Pausando.", "error")
                     self.timeout = True # Most API errors suggest a pause
-                case _:
-                    custom_print(f"⚠️ Respuesta inesperada del servidor: '{result}' para el código {token}. Considerar como error y pausar.", "warning")
+                    # Consider adding admin notification for persistent API errors if needed
+                case "unknown_api_response": # Handling the explicitly set unknown type
+                    custom_print(f"⚠️ Respuesta desconocida de la API procesando {token}. Pausando.", "warning")
+                    self.timeout = True
+                case _: # Default catch-all for other string responses or unexpected response_status
+                    custom_print(f"⚠️ Respuesta/Estado inesperado del servidor: '{response_status}' para el código {token}. Considerar como error y pausar.", "warning")
                     self.timeout = True # Default to pausing on unknown states
                     
         except Exception as e:

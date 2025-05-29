@@ -91,7 +91,7 @@ class BinanceAPI:
                 currency = data.get("currency", "N/A")
                 amount = data.get("grabAmountStr", "0")
                 custom_print(f"¡Caja reclamada exitosamente! {amount} {currency}", "success")
-                return "claimed"
+                return {"status": "claimed", "data": {"amount": amount, "currency": currency}}
             
             # Manejo de errores conocidos
             error_code = response.get("code", "")

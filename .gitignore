@@ -62,3 +62,8 @@ config_*.py
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Custom additions for this project
+source/config.py
+data/claimed_codes.json
+data/

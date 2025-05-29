@@ -35,6 +35,14 @@ class Config:
     # Delay in seconds between claiming attempts
     REQUEST_DELAY_SECONDS: Union[int, float] = 3
     
+    # ==================================================
+    # CONFIGURACIÓN DE ADMINISTRADOR DEL BOT
+    # ==================================================
+    # Tu User ID de Telegram. El bot te enviará notificaciones y responderá a tus comandos.
+    # Puedes obtener tu User ID hablando con bots como @userinfobot en Telegram.
+    # Pon 0 si no quieres activar esta funcionalidad (no recibirás notificaciones ni podrás usar comandos).
+    ADMIN_USER_ID: int = 0 
+    
     # Configuración de encabezados para las solicitudes HTTP
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",

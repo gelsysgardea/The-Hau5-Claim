@@ -1,20 +1,40 @@
 from telethon import TelegramClient, events
 from telethon.tl.types import User, Chat, Channel
 import re
+import sys # Added for sys.exit
 
-from source import Config
+# custom_print is imported before Config to be available for error messages
 from source import custom_print
 from lib.manipulator import ManipulateToken
+# Config import is now handled within __init__ to allow custom_print to be used for errors
 
 
 class BaseClient:
     def __init__(self):
-        self.config: Config = Config()
+        try:
+            from source.config import Config # Moved import here
+            self.config: Config = Config()
+        except ImportError:
+            custom_print("Error: Configuration file 'source/config.py' not found. Please copy 'source/config.example.py' to 'source/config.py' and fill in your details.", "error")
+            sys.exit(1)
+        except SyntaxError:
+            custom_print("Error: Configuration file 'source/config.py' contains syntax errors. Please correct them.", "error")
+            sys.exit(1)
+        except Exception as e:
+            custom_print(f"Error loading configuration: {e}", "error")
+            sys.exit(1)
+            
         self.client: TelegramClient = TelegramClient(
             self.config.CLIENT_NAME, self.config.API_ID, self.config.API_HASH
         )
-        self.manipulator = ManipulateToken()
-        self.setup_event_handler()
+        # Pass config and self (BaseClient instance) to ManipulateToken constructor
+        self.manipulator = ManipulateToken(self.config, self) 
+        
+        self.is_monitoring_active: bool = False # Initialize monitoring status
+        
+        self.setup_event_handler() # For general messages
+        self.setup_command_handler() # For admin commands
+        
         self.chat_ids = set()
 
     async def get_chats(self):
@@ -62,7 +82,9 @@ class BaseClient:
         @self.client.on(events.NewMessage())
         async def _(event: events.NewMessage.Event):
             try:
-                # Verificar si el mensaje proviene de un chat monitoreado
+                # Do not process if monitoring is inactive or chat is not in the list
+                if not self.is_monitoring_active:
+                    return
                 if event.chat_id not in self.chat_ids:
                     return
                 
@@ -115,20 +137,89 @@ class BaseClient:
             except Exception as e:
                 custom_print(f"Error al procesar mensaje: {str(e)}", "error")
 
-    async def start_client(self):
-        """Inicia el cliente y configura los chats"""
-        custom_print("Iniciando cliente...", "info")
-        await self.client.start(phone=lambda: input('Por favor ingresa tu número de teléfono (con código de país): '))
-        
-        # Obtener y configurar los chats a monitorear
-        await self.get_chats()
-        
-        if not self.chat_ids:
-            custom_print("No se encontraron chats para monitorear. Saliendo...", "error")
-            return False
+    async def send_admin_notification(self, message: str):
+        """Sends a notification message to the admin user."""
+        admin_id = getattr(self.config, 'ADMIN_USER_ID', 0)
+        if not admin_id or admin_id == 0:
+            custom_print(f"Notificación para admin no enviada (ADMIN_USER_ID no configurado): {message}", "warning")
+            return
+
+        try:
+            await self.client.send_message(admin_id, message, parse_mode='md')
+            custom_print(f"Notificación enviada al admin ({admin_id}): {message}", "info")
+        except Exception as e:
+            custom_print(f"Error al enviar notificación al admin ({admin_id}): {str(e)}", "error")
+
+    def setup_command_handler(self):
+        """Sets up the event handler for admin commands."""
+        admin_id = getattr(self.config, 'ADMIN_USER_ID', 0)
+        if not admin_id or admin_id == 0:
+            custom_print("ADMIN_USER_ID no está configurado o es 0. Los comandos de administrador estarán deshabilitados.", "warning")
+            return
+
+        @self.client.on(events.NewMessage(from_users=admin_id))
+        async def admin_command_handler(event: events.NewMessage.Event):
+            command_text = event.raw_text.strip().lower()
+            sender_id = event.sender_id
             
-        custom_print("Cliente iniciado, monitoreando mensajes...", "info")
-        return True
+            custom_print(f"Comando recibido de ADMIN ({sender_id}): '{command_text}'", "info")
+
+            if command_text == "/start_bot":
+                if self.is_monitoring_active:
+                    await event.respond("🤖 El monitoreo ya está activo.")
+                    custom_print("Comando /start_bot ignorado: monitoreo ya activo.", "info")
+                else:
+                    self.is_monitoring_active = True
+                    await self.get_chats() # Refresh chat list on start
+                    await event.respond("🤖 Monitoreo iniciado. Escuchando nuevos códigos...")
+                    custom_print("Monitoreo iniciado por comando de administrador.", "success")
+            elif command_text == "/stop_bot":
+                if not self.is_monitoring_active:
+                    await event.respond("🛑 El monitoreo ya está detenido.")
+                    custom_print("Comando /stop_bot ignorado: monitoreo ya detenido.", "info")
+                else:
+                    self.is_monitoring_active = False
+                    await event.respond("🛑 Monitoreo detenido.")
+                    custom_print("Monitoreo detenido por comando de administrador.", "warning")
+            elif command_text == "/status_bot":
+                status_message = f"🤖 Estado del monitoreo: {'Activo ✅' if self.is_monitoring_active else 'Detenido ❌'}"
+                if self.is_monitoring_active:
+                    status_message += f"\n👁️ Monitoreando {len(self.chat_ids)} chat(s)."
+                await event.respond(status_message)
+                custom_print(f"Comando /status_bot ejecutado. Estado: {'Activo' if self.is_monitoring_active else 'Detenido'}", "info")
+            # else:
+                # Optional: Respond to unknown commands or ignore them
+                # await event.respond("❓ Comando desconocido.")
+
+    async def process_code_with_answer(self, code: str, answer: str):
+        """Procesa un código junto con su respuesta (funcionalidad pendiente)"""
+        custom_print(f"Received code '{code}' with answer '{answer}'. This feature is pending implementation.", "warning")
+
+    async def start_client(self):
+        """Inicia el cliente de Telegram y notifica al administrador."""
+        custom_print("Iniciando cliente...", "info")
+        try:
+            # Prompt for phone and code if not already authorized
+            await self.client.start(
+                phone=lambda: input('Por favor ingresa tu número de teléfono (con código de país): ')
+            )
+            custom_print("Cliente de Telegram conectado exitosamente.", "info")
+
+            # Notify admin that bot is online and waiting for /start_bot
+            await self.send_admin_notification(
+                "🤖 Bot en línea. Esperando comando `/start_bot` para iniciar el monitoreo de chats."
+            )
+            
+            # No longer calling get_chats() here or checking self.chat_ids
+            # self.is_monitoring_active is False by default.
+            
+            custom_print("Cliente iniciado, esperando comandos del administrador...", "info")
+            return True # Indicates successful client connection
+
+        except Exception as e:
+            custom_print(f"Error severo durante el inicio del cliente de Telegram: {str(e)}", "error")
+            # Consider re-raising or handling more specifically if needed
+            return False # Indicates failure to connect client
 
     def start(self):
         """Método principal para iniciar el cliente"""

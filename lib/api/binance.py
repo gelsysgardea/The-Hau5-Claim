@@ -1,17 +1,20 @@
 import re
 import json
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING # Added TYPE_CHECKING
 
 import aiohttp
 
-from source import Config
+# from source import Config -> Removed
 from source import custom_print
+
+if TYPE_CHECKING:
+    from source.config import Config # For type hinting
 
 
 class BinanceAPI:
-    def __init__(self):
-        self.config: Config = Config()
+    def __init__(self, config: 'Config'): # Added config parameter with string literal type hint
+        self.config: 'Config' = config # Set config from parameter, type hint as string literal
         self.response: Optional[aiohttp.ClientResponse] = None
 
     async def send_request(self, redpacket: str) -> str:
@@ -48,37 +51,38 @@ class BinanceAPI:
                     
                     # Verificar si la respuesta es exitosa
                     if response.status != 200:
-                        custom_print(f"Error en la respuesta HTTP: {response.status}", "error")
-                        return "processed"
+                        error_msg = f"Error en la respuesta HTTP: {response.status}"
+                        custom_print(error_msg, "error")
+                        return f"http_error_{response.status}"
                     
                     try:
                         response_json = await response.json()
                     except json.JSONDecodeError:
-                        custom_print("Error al decodificar la respuesta JSON", "error")
-                        return "processed"
+                        custom_print("Error al decodificar la respuesta JSON. No se pudo procesar el contenido.", "error")
+                        return "json_decode_error"
                     
                     # Procesar la respuesta
                     return await self._process_response(response_json, redpacket)
                     
         except asyncio.TimeoutError:
-            custom_print("Tiempo de espera agotado al conectar con Binance", "error")
-            return "processed"
+            custom_print("Tiempo de espera agotado al conectar con Binance.", "error")
+            return "timeout_error"
             
         except aiohttp.ClientError as e:
-            custom_print(f"Error de conexión: {str(e)}", "error")
-            return "processed"
+            custom_print(f"Error de conexión de red: {str(e)}", "error")
+            return "network_error"
             
         except Exception as e:
-            custom_print(f"Error inesperado: {str(e)}", "error")
-            return "processed"
+            custom_print(f"Error inesperado durante el envío de la solicitud: {str(e)}", "error")
+            return "unknown_error_send_request"
     
     async def _process_response(self, response: Dict[str, Any], redpacket: str) -> str:
         """Procesa la respuesta de la API de Binance."""
         try:
             # Verificar si la respuesta es None o no es un diccionario
             if not response or not isinstance(response, dict):
-                custom_print("Error: Respuesta no válida de la API", "error")
-                return "error"
+                custom_print("Error: Formato de respuesta de la API no válido o respuesta vacía.", "error")
+                return "invalid_api_response_format"
             
             # Respuesta exitosa
             if isinstance(response.get("success", False), bool) and response.get("success"):
@@ -87,7 +91,7 @@ class BinanceAPI:
                 currency = data.get("currency", "N/A")
                 amount = data.get("grabAmountStr", "0")
                 custom_print(f"¡Caja reclamada exitosamente! {amount} {currency}", "success")
-                return "claimed"
+                return {"status": "claimed", "data": {"amount": amount, "currency": currency}}
             
             # Manejo de errores conocidos
             error_code = response.get("code", "")
@@ -125,9 +129,10 @@ class BinanceAPI:
                 return "session_expired"
             
             # Otro tipo de error
-            custom_print(f"Error en la respuesta de Binance: {error_message} (Código: {error_code})", "error")
-            return "processed"
+            error_key = f"binance_api_error_{error_code}" if error_code else "binance_api_error_unknown"
+            custom_print(f"Error en la respuesta de Binance: {error_message} (Código: {error_code if error_code else 'Desconocido'})", "error")
+            return error_key
             
         except Exception as e:
-            custom_print(f"Error al procesar la respuesta: {str(e)}", "error")
-            return "processed"
+            custom_print(f"Error inesperado al procesar la respuesta de Binance: {str(e)}", "error")
+            return "unknown_error_process_response"

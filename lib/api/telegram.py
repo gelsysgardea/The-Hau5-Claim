@@ -1,19 +1,34 @@
 from telethon import TelegramClient, events
 from telethon.tl.types import User, Chat, Channel
 import re
+import sys # Added for sys.exit
 
-from source import Config
+# custom_print is imported before Config to be available for error messages
 from source import custom_print
 from lib.manipulator import ManipulateToken
+# Config import is now handled within __init__ to allow custom_print to be used for errors
 
 
 class BaseClient:
     def __init__(self):
-        self.config: Config = Config()
+        try:
+            from source.config import Config # Moved import here
+            self.config: Config = Config()
+        except ImportError:
+            custom_print("Error: Configuration file 'source/config.py' not found. Please copy 'source/config.example.py' to 'source/config.py' and fill in your details.", "error")
+            sys.exit(1)
+        except SyntaxError:
+            custom_print("Error: Configuration file 'source/config.py' contains syntax errors. Please correct them.", "error")
+            sys.exit(1)
+        except Exception as e:
+            custom_print(f"Error loading configuration: {e}", "error")
+            sys.exit(1)
+            
         self.client: TelegramClient = TelegramClient(
             self.config.CLIENT_NAME, self.config.API_ID, self.config.API_HASH
         )
-        self.manipulator = ManipulateToken()
+        # Pass config to ManipulateToken constructor
+        self.manipulator = ManipulateToken(self.config) 
         self.setup_event_handler()
         self.chat_ids = set()
 
@@ -114,6 +129,10 @@ class BaseClient:
             
             except Exception as e:
                 custom_print(f"Error al procesar mensaje: {str(e)}", "error")
+
+    async def process_code_with_answer(self, code: str, answer: str):
+        """Procesa un código junto con su respuesta (funcionalidad pendiente)"""
+        custom_print(f"Received code '{code}' with answer '{answer}'. This feature is pending implementation.", "warning")
 
     async def start_client(self):
         """Inicia el cliente y configura los chats"""

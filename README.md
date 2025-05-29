@@ -13,12 +13,14 @@ Herramienta automatizada para reclamar códigos de criptocajas de Binance desde 
 ## 🛠️ Instalación Segura
 
 1. **Clonar el repositorio**
+
    ```bash
    git clone https://github.com/tu-usuario/Binance-Crypto-Box-Wrapper
    cd Binance-Crypto-Box-Wrapper
    ```
 
 2. **Crear un entorno virtual (recomendado)**
+
    ```bash
    python -m venv .venv
    .venv\Scripts\activate  # En Windows
@@ -26,15 +28,19 @@ Herramienta automatizada para reclamar códigos de criptocajas de Binance desde 
    ```
 
 3. **Instalar dependencias**
+
    ```bash
    pip install -r requirements.txt
    ```
 
 4. **Configuración Inicial**
+
    - Copia el archivo `source/config.example.py` a `source/config.py`
-   ```bash
-   copy source\config.example.py source\config.py
-   ```
+
+     ```bash
+     copy source\config.example.py source\config.py
+     ```
+
    - Sigue las instrucciones en el archivo `source/config.py` para configurar tus credenciales
 
 ## 🔒 Configuración Segura
@@ -46,6 +52,7 @@ Herramienta automatizada para reclamar códigos de criptocajas de Binance desde 
 4. Copia el `api_id` y `api_hash`
 
 ### 2. Configurar el archivo `source/config.py`
+
 ```python
 # Configuración de Telegram
 API_ID = 1234567  # Reemplaza con tu API ID
@@ -67,6 +74,7 @@ EXCLUDE_CHATS_WITH = ["intel"]  # Palabras para excluir chats
 ## 🚀 Uso del Bot
 
 1. **Iniciar el bot**
+
    ```bash
    python main.py
    ```
@@ -98,10 +106,13 @@ EXCLUDE_CHATS_WITH = ["intel"]  # Palabras para excluir chats
    ```
 
 2. **Iniciar sesión en Telegram**
+
    - El bot te pedirá que ingreses tu número de teléfono
    - Proporciona el código de verificación que recibas
 
-3. **El bot comenzará a monitorear automáticamente** los chats en busca de códigos de Binance.
+3. **Monitoreo automático**
+
+   El bot comenzará a monitorear automáticamente los chats en busca de códigos de Binance.
 
 ## 🔍 Características
 

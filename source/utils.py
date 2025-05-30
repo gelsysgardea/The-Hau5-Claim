@@ -3,7 +3,7 @@ from typing import Literal
 
 def custom_print(
     text: str,
-    suffix: Literal["info", "error", "warning", "success"] = "info",
+    suffix: Literal["info", "error", "warning", "success", "debug"] = "info",
 ) -> None:
     
     suffixes = {
@@ -11,6 +11,7 @@ def custom_print(
         "error": "\033[1;31;48mERROR\033[1;37;0m",
         "warning": "\033[1;33;48mWARNING\033[1;37;0m",
         "success": "\033[1;92;48mSUCCESS\033[1;37;0m",
+        "debug": "\033[1;36;48mDEBUG\033[1;37;0m",
     }
 
     print(f"[{suffixes[suffix]}]: {text}")

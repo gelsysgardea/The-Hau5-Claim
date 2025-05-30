@@ -47,31 +47,31 @@ class BaseClient:
             sys.exit(1)
             
     def extract_codes(self, text):
-        """Extrae códigos de un texto usando múltiples patrones"""
-        codes = set()
+        """Extrae códigos de 8 caracteres alfanuméricos en mayúsculas"""
+        if not text or not isinstance(text, str):
+            return set()
+            
+        # Buscar secuencias de exactamente 8 caracteres alfanuméricos en mayúsculas
+        codes = set(re.findall(r'\b([A-Z0-9]{8})\b', text.upper()))
         
-        # Limpiar el texto de caracteres especiales que podrían interferir
-        clean_text = re.sub(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF\u2600-\u26FF\u2700-\u27BF]', ' ', text)
+        # Si no se encontraron códigos de 8 caracteres, buscar códigos de 8-10 caracteres
+        if not codes:
+            codes = set(re.findall(r'\b([A-Z0-9]{8,10})\b', text.upper()))
         
-        # Probar cada patrón
-        for pattern in self.code_patterns:
-            matches = re.findall(pattern, clean_text, re.IGNORECASE | re.MULTILINE)
-            for match in matches:
-                # Si el patrón tiene grupos, tomar el primer grupo que coincida
-                code = match[0] if isinstance(match, tuple) else match
-                # Limpiar y estandarizar el código
-                code = re.sub(r'[^A-Z0-9]', '', code.upper())
-                if 8 <= len(code) <= 10:  # Solo códigos de 8 a 10 caracteres
-                    codes.add(code)
-        
-        return list(codes)
+        # Registrar los códigos encontrados
+        if codes:
+            self.log(f"🔍 Códigos detectados: {', '.join(codes)}", "debug")
+        else:
+            self.log("No se encontraron códigos en el mensaje", "debug")
+            
+        return codes
         
     def log(self, message, level="info"):
         """Función de registro unificada"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"[{timestamp}] [{level.upper()}] {message}")
         
-    def initialize_client(self):
+    async def initialize_client(self):
         """Inicializa el cliente de Telegram"""
         try:
             # Inicializar el cliente de Telegram con el bot token
@@ -79,32 +79,46 @@ class BaseClient:
                 'bot_session',
                 self.config.API_ID,
                 self.config.API_HASH
-            ).start(bot_token=self.config.BOT_TOKEN)
+            )
             
-            # Configurar el manejador de comandos
-            self.setup_command_handlers()
+            # Iniciar la conexión
+            await self.client.start(bot_token=self.config.BOT_TOKEN)
+            
+            # Obtener información del bot
+            me = await self.client.get_me()
+            self.log(f"✅ Conectado como @{me.username} (ID: {me.id})", "success")
             
             # Inicializar el manipulador de tokens
-            self.manipulator = ManipulateToken(self.config, self)  # Pass self as client_handler
-            # Cargar códigos canjeados existentes
-            self.manipulator._load_successful_claims()       
-            # Estado del bot - Activar monitoreo por defecto
+            self.manipulator = ManipulateToken(self.config, self)
+            self.manipulator._load_successful_claims()
+            
+            # Estado del bot
             self.is_monitoring_active = True
             self.auto_claim_active = True
             self.chat_ids = set()
             
-            # Agregar el chat del administrador a la lista de monitoreo
-            if self.config.ADMIN_CHAT_ID:
-                self.chat_ids.add(self.config.ADMIN_CHAT_ID)
+            # Configurar manejadores
+            self.setup_command_handlers()
+            self.setup_event_handler()
             
             # Configurar comandos del bot
-            self.setup_bot_commands()
+            await self.setup_bot_commands()
             
-            self.log("Bot inicializado correctamente", "info")
+            # Registrar que el bot está listo
+            self.log("🔍 Modo de monitoreo universal ACTIVADO", "info")
+            self.log("🤖 Bot listo para detectar códigos en TODOS los chats", "info")
+            self.log("👀 Monitoreando mensajes entrantes...", "info")
+            
+            # Notificar al administrador
+            await self.send_admin_notification(
+                "🤖 *Bot iniciado correctamente*\n"
+                "El bot está listo para monitorear códigos."
+            )
+            
             return True
             
         except Exception as e:
-            self.log(f"Error al inicializar el cliente de Telegram: {str(e)}", "error")
+            self.log(f"❌ Error al inicializar el cliente de Telegram: {str(e)}", "error")
             return False
 
     async def get_chats(self):
@@ -148,65 +162,133 @@ class BaseClient:
 
 
 
+    async def process_message(self, event):
+        """Procesa un mensaje entrante"""
+        try:
+            # Obtener información del mensaje
+            message = event.message
+            chat = await event.get_chat()
+            sender = await event.get_sender()
+            
+            # Ignorar mensajes propios
+            if hasattr(sender, 'is_self') and sender.is_self:
+                return
+                
+            # Obtener el ID del chat y el nombre
+            chat_id = chat.id
+            chat_title = getattr(chat, 'title', 'Chat privado')
+            
+            # Extraer el texto del mensaje
+            text = message.text or message.raw_text or ''
+            
+            # Extraer códigos del mensaje
+            codes = self.extract_codes(text)
+            
+            if codes:
+                custom_print(f"📨 Mensaje de {chat_title} (ID: {chat_id}): {text}", "debug")
+                custom_print(f"🔍 Códigos detectados: {', '.join(codes)}", "success")
+                
+                # Procesar cada código encontrado
+                for code in codes:
+                    try:
+                        custom_print(f"🔧 Procesando código: {code}", "info")
+                        # Usar el manipulador para procesar el código
+                        await self.manipulator.main(code)
+                        # Pequeña pausa entre códigos
+                        await asyncio.sleep(1)
+                    except Exception as e:
+                        custom_print(f"Error al procesar código {code}: {str(e)}", "error")
+            
+            return True
+            
+        except Exception as e:
+            custom_print(f"Error al procesar mensaje: {str(e)}", "error")
+            return False
+            
+    # Eliminado el manejador duplicado de mensajes
+
     def setup_event_handler(self):
+        """Configura el manejador de eventos para mensajes"""
         @self.client.on(events.NewMessage())
-        async def _(event: events.NewMessage.Event):
+        async def message_handler(event):
             try:
-                # Registro detallado del mensaje recibido
-                custom_print(f"\n📨 Mensaje recibido - ID: {event.id}", "debug")
-                custom_print(f"📝 Contenido: {event.raw_text}", "debug")
-                custom_print(f"👤 Remitente ID: {event.sender_id}", "debug")
-                custom_print(f"💬 Chat ID: {event.chat_id} (Privado: {event.is_private})", "debug")
+                # Obtener el texto del mensaje
+                message_text = event.raw_text or ''
+                
+                # Registrar información del mensaje
+                self.log(f"\n📨 Mensaje recibido en chat ID: {event.chat_id}", "debug")
+                self.log(f"👤 Remitente ID: {event.sender_id}", "debug")
+                self.log(f"📝 Contenido: {message_text}", "debug")
                 
                 # Ignorar mensajes propios
                 if hasattr(event.sender, 'is_self') and event.sender.is_self:
-                    custom_print("Ignorando mensaje propio", "debug")
-                    return
-                
-                # Verificar si el mensaje es relevante
-                is_relevant = False
-                
-                # Verificar si es un mensaje del administrador
-                is_admin_chat = (event.is_private and event.sender_id == self.config.ADMIN_CHAT_ID)
-                
-                # Verificar si es un mensaje de un chat monitoreado
-                is_monitored_chat = event.chat_id in self.chat_ids
-                
-                # Verificar si es un mensaje en un grupo/canal donde estamos mencionados
-                is_mentioned = False
-                if hasattr(event, 'message') and hasattr(event.message, 'mentioned'):
-                    is_mentioned = event.message.mentioned
-                
-                custom_print(f"Admin: {is_admin_chat}, Chat monitoreado: {is_monitored_chat}, Mencionado: {is_mentioned}", "debug")
-                
-                # Procesar mensajes del admin, de chats monitoreados o donde nos mencionen
-                if not (is_admin_chat or is_monitored_chat or is_mentioned):
-                    custom_print("Mensaje no relevante, ignorando...", "debug")
+                    self.log("Ignorando mensaje propio", "debug")
                     return
                     
-                # Si llegamos aquí, el mensaje es relevante
-                custom_print("✅ Mensaje relevante detectado, procesando...", "debug")
+                # Ignorar mensajes de canales anónimos
+                if hasattr(event.sender, 'id') and event.sender.id == 777000:
+                    self.log("Ignorando mensaje de canal anónimo", "debug")
+                    return
+                
+                # Verificar si el mensaje es relevante (contiene texto)
+                if not message_text.strip():
+                    self.log("Mensaje vacío, ignorando", "debug")
+                    return
+                
+                # Buscar códigos en el mensaje
+                codes = self.extract_codes(message_text)
+                
+                if codes:
+                    # Filtrar códigos ya procesados
+                    filtered_codes = []
+                    for code in codes:
+                        if code in self.manipulator.permanently_claimed_codes:
+                            self.log(f"🔍 Código ya procesado: {code}", "debug")
+                            continue
+                        if code in self.manipulator.processed_tokens:
+                            self.log(f"🔍 Código ya procesado en esta sesión: {code}", "debug")
+                            continue
+                        filtered_codes.append(code)
                     
-                custom_print("✅ Mensaje aceptado para procesamiento", "debug")
+                    if not filtered_codes:
+                        self.log("🔍 Todos los códigos ya han sido procesados anteriormente", "debug")
+                        return
+                        
+                    self.log(f"🔍 Códigos nuevos detectados: {', '.join(filtered_codes)}", "info")
+                    
+                    # Procesar cada código encontrado
+                    for code in filtered_codes:
+                        try:
+                            self.log(f"🔧 Procesando código: {code}", "info")
+                            await self.manipulator.main(code)
+                            await asyncio.sleep(1)  # Pequeña pausa entre códigos
+                        except Exception as e:
+                            self.log(f"Error al procesar código {code}: {str(e)}", "error")
+                else:
+                    self.log("No se encontraron códigos en el mensaje", "debug")
                 
-                message_text = event.raw_text.strip()
-                
-                # Buscar mensajes con formato de pregunta/respuesta
+                # Procesar mensajes con formato de pregunta/respuesta de Binance
                 if 'Answer:' in message_text and 'app.binance.com/uni-qr/cart/' in message_text:
-                    # Extraer el código del enlace
-                    code_match = re.search(r'app\.binance\.com/uni-qr/cart/(\d+)', message_text)
-                    if code_match:
-                        code = code_match.group(1)
-                        # Extraer la respuesta (línea después de 'Answer:')
-                        answer_section = message_text.split('Answer:', 1)[1].strip()
-                        # Tomar la primera línea no vacía como respuesta
-                        answer = next((line.strip() for line in answer_section.split('\n') if line.strip()), '')
-                        # Limpiar la respuesta de emojis y espacios extra
-                        answer = re.sub(r'[^\w\s-]', '', answer).strip()
-                        if answer:
-                            await self.process_code_with_answer(code, answer)
-                            return
-                
+                    self.log("📝 Mensaje de Binance detectado", "debug")
+                    try:
+                        # Extraer el código del enlace
+                        code_match = re.search(r'app\.binance\.com/uni-qr/cart/(\d+)', message_text)
+                        if code_match:
+                            code = code_match.group(1)
+                            # Extraer la respuesta (línea después de 'Answer:')
+                            answer_section = message_text.split('Answer:', 1)[1].strip()
+                            # Tomar la primera línea no vacía como respuesta
+                            answer = next((line.strip() for line in answer_section.split('\n') if line.strip()), '')
+                            # Limpiar la respuesta de emojis y espacios extra
+                            answer = re.sub(r'[^\w\s-]', '', answer).strip()
+                            if answer:
+                                self.log(f"🔑 Procesando código de Binance: {code} con respuesta: {answer}", "info")
+                                await self.process_code_with_answer(code, answer)
+                    except Exception as e:
+                        self.log(f"Error al procesar mensaje de Binance: {str(e)}", "error")
+                        
+            except Exception as e:
+                self.log(f"❌ Error en el manejador de mensajes: {str(e)}", "error")
                 # Búsqueda de códigos en el mensaje
                 try:
                     if not message_text:
@@ -483,49 +565,127 @@ El bot está listo para usarse. ¡Empieza a reclamar códigos!"""
         custom_print(f"Received code '{code}' with answer '{answer}'. This feature is pending implementation.", "warning")
 
     async def start_client(self):
-        """Inicia el cliente de Telegram y notifica al administrador."""
-        custom_print("Iniciando cliente...", "info")
+        """Inicia el cliente de Telegram con autenticación de usuario"""
         try:
-            # Prompt for phone and code if not already authorized
+            custom_print("🔑 Iniciando sesión en Telegram...", "info")
+            
+            # Configurar el cliente con tus credenciales API
+            self.client = TelegramClient(
+                'user_session',  # Nombre del archivo de sesión
+                self.config.API_ID,
+                self.config.API_HASH,
+                device_model="PC",
+                app_version="1.0.0",
+                system_version="Windows 10",
+                lang_code="es",
+                system_lang_code="es"
+            )
+            
+            # Iniciar sesión
             await self.client.start(
-                phone=lambda: input('Por favor ingresa tu número de teléfono (con código de país): ')
-            )
-            custom_print("Cliente de Telegram conectado exitosamente.", "info")
-
-            # Notify admin that bot is online and waiting for /start_bot
-            await self.send_admin_notification(
-                "🤖 Bot en línea. Esperando comando `/start_bot` para iniciar el monitoreo de chats."
+                phone=lambda: input('\n📱 Por favor ingresa tu número de teléfono (con código de país, ej: +521234567890): '),
+                code_callback=lambda: input('🔑 Ingresa el código de verificación: '),
+                password=lambda: input('🔐 Si tienes autenticación en dos pasos, ingresa la contraseña: ')
             )
             
-            # No longer calling get_chats() here or checking self.chat_ids
-            # self.is_monitoring_active is False by default.
+            # Verificar la sesión
+            me = await self.client.get_me()
+            custom_print(f"✅ Sesión iniciada como {me.first_name} (@{me.username or 'sin_usuario'}) - ID: {me.id}", "success")
             
-            custom_print("Cliente iniciado, esperando comandos del administrador...", "info")
-            return True # Indicates successful client connection
-
+            # Configurar manejadores
+            self.setup_command_handlers()
+            self.setup_event_handler()
+            
+            # Inicializar manipulador de tokens
+            self.manipulator = ManipulateToken(self.config, self)
+            self.manipulator._load_successful_claims()
+            
+            # Estado del bot
+            self.is_monitoring_active = True
+            self.auto_claim_active = True
+            self.chat_ids = set()
+            
+            custom_print("\n🤖 Bot iniciado correctamente", "info")
+            custom_print("👀 Monitoreando mensajes entrantes...", "info")
+            
+            # Mantener la sesión activa
+            await self.client.run_until_disconnected()
+            return True
+            
         except Exception as e:
-            custom_print(f"Error severo durante el inicio del cliente de Telegram: {str(e)}", "error")
-            # Consider re-raising or handling more specifically if needed
-            return False # Indicates failure to connect client
+            custom_print(f"❌ Error al iniciar la sesión: {str(e)}", "error")
+            return False
 
-    def start(self):
-        """Método principal para iniciar el cliente"""
+    async def start_async(self):
+        """Método asíncrono para iniciar el cliente"""
         self.log("Iniciando el bot...", "info")
         
-        # Inicializar el cliente de Telegram
-        if not hasattr(self, 'client') or not self.client:
-            if not self.initialize_client():
-                self.log("No se pudo inicializar el cliente de Telegram", "error")
-                return
-                
         try:
+            # Iniciar el cliente de Telegram
             self.log("Conectando al servidor de Telegram...", "info")
-            self.client.loop.run_until_complete(self.start_client())
-            self.client.run_until_disconnected()
+            
+            # Configurar el cliente con tus credenciales API
+            self.client = TelegramClient(
+                'user_session',  # Nombre del archivo de sesión
+                self.config.API_ID,
+                self.config.API_HASH,
+                device_model="PC",
+                app_version="1.0.0",
+                system_version="Windows 10",
+                lang_code="es",
+                system_lang_code="es"
+            )
+            
+            # Iniciar sesión
+            await self.client.start(
+                phone=lambda: input('\n📱 Por favor ingresa tu número de teléfono (con código de país, ej: +521234567890): '),
+                code_callback=lambda: input('🔑 Ingresa el código de verificación: '),
+                password=lambda: input('🔐 Si tienes autenticación en dos pasos, ingresa la contraseña: ')
+            )
+            
+            # Verificar la sesión
+            me = await self.client.get_me()
+            self.log(f"✅ Sesión iniciada como {me.first_name} (@{me.username or 'sin_usuario'}) - ID: {me.id}", "success")
+            
+            # Configurar manejadores
+            self.setup_command_handlers()
+            self.setup_event_handler()
+            
+            # Inicializar manipulador de tokens
+            self.manipulator = ManipulateToken(self.config, self)
+            self.manipulator._load_successful_claims()
+            
+            # Estado del bot
+            self.is_monitoring_active = True
+            self.auto_claim_active = True
+            self.chat_ids = set()
+            
+            self.log("\n🤖 Bot iniciado correctamente", "info")
+            self.log("👀 Monitoreando mensajes entrantes...", "info")
+            
+            # Mantener la sesión activa
+            await self.client.run_until_disconnected()
+            
         except KeyboardInterrupt:
-            self.log("Bot detenido por el usuario", "info")
+            self.log("\n🛑 Bot detenido por el usuario", "info")
         except Exception as e:
-            self.log(f"Error durante la ejecución del bot: {str(e)}", "error")
+            self.log(f"❌ Error durante la ejecución del bot: {str(e)}", "error")
         finally:
-            self.log("Desconectando el bot...", "info")
-            self.client.disconnect()
+            self.log("🔌 Desconectando el bot...", "info")
+            if hasattr(self, 'client') and self.client:
+                await self.client.disconnect()
+    
+    def start(self):
+        """Método principal síncrono para iniciar el cliente"""
+        try:
+            # Crear un nuevo bucle de eventos
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self.start_async())
+        except Exception as e:
+            self.log(f"❌ Error al iniciar el bot: {str(e)}", "error")
+            import traceback
+            traceback.print_exc()  # Imprimir el traceback completo
+        finally:
+            # Cerrar el bucle de eventos
+            loop.close()

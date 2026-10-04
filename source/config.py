@@ -26,7 +26,7 @@ class Config:
     # 3. Crea una nueva aplicación o usa una existente
     # 4. Copia el api_id y api_hash y péguelos abajo
     API_ID: int = 25388732  # API ID de Telegram
-    API_HASH: str = "***REMOVED***"  # API HASH de Telegram
+    API_HASH: str = ""  # API HASH de Telegram
     
     # ==================================================
 
@@ -38,17 +38,17 @@ class Config:
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-        "bnc-uuid": "***REMOVED***",
-        "device-info": "***REMOVED***",
+        "bnc-uuid": "",
+        "device-info": "",
         "clienttype": "web",
-        "csrftoken": "***REMOVED***",
-        "fvideo-id": "***REMOVED***",
-        "fvideo-token": "***REMOVED***",
-        "x-trace-id": "***REMOVED***",
-        "x-ui-request-trace": "***REMOVED***",
+        "csrftoken": "",
+        "fvideo-id": "",
+        "fvideo-token": "",
+        "x-trace-id": "",
+        "x-ui-request-trace": "",
         "lang": "es-419",
         "Referer": "https://www.binance.com/es/my/wallet/account/payment/cryptobox",
-        "Cookie": '***REMOVED***',
+        "Cookie": '',
         "Origin": "https://www.binance.com",
         "Accept": "*/*",
         "Accept-Encoding": "gzip, deflate, br, zstd",
